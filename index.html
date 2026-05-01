@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>【MEO営業管理】月初CSV変換ツール</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Meiryo", sans-serif;
+    background: #f5f6f8;
+    color: #1f2937;
+    margin: 0;
+    padding: 24px;
+    line-height: 1.6;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 {
+    font-size: 24px;
+    margin: 0 0 8px;
+    color: #111827;
+  }
+  .subtitle {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .step-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step-num {
+    background: #2563eb;
+    color: #fff;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .month-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  select, input[type="number"] {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+  }
+  .month-display {
+    font-size: 18px;
+    font-weight: 700;
+    color: #2563eb;
+    padding: 6px 12px;
+    background: #eff6ff;
+    border-radius: 8px;
+  }
+  .drop-zone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #fafbfc;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: #2563eb;
+    background: #eff6ff;
+  }
+  .drop-zone-text {
+    font-size: 15px;
+    color: #4b5563;
+    margin: 0;
+  }
+  .drop-zone-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 6px;
+  }
+  #fileInput { display: none; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .summary-item {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .summary-label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+  .summary-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #111827;
+  }
+  .summary-value.highlight { color: #2563eb; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  th, td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  th {
+    background: #f3f4f6;
+    font-weight: 600;
+    color: #374151;
+    position: sticky;
+    top: 0;
+  }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-1 { background: #dbeafe; color: #1e40af; }
+  .badge-2 { background: #fef3c7; color: #92400e; }
+  .table-wrap {
+    max-height: 400px;
+    overflow: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  }
+  button.primary {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  button.primary:hover { background: #1d4ed8; }
+  button.primary:disabled {
+    background: #cbd5e1;
+    cursor: not-allowed;
+  }
+  button.secondary {
+    background: #fff;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.secondary:hover { background: #f9fafb; }
+  .alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  .alert-info {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+  }
+  .alert-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+  .alert-success {
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+  .hidden { display: none !important; }
+  .help-list {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13px;
+    color: #4b5563;
+  }
+  .help-list li { margin-bottom: 4px; }
+  .file-name {
+    font-size: 13px;
+    color: #2563eb;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+  details {
+    margin-top: 12px;
+    font-size: 13px;
+  }
+  summary {
+    cursor: pointer;
+    color: #2563eb;
+    font-weight: 600;
+    user-select: none;
+  }
+  .footer-note {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 12px;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>【MEO営業管理】月初CSV変換ツール</h1>
+  <p class="subtitle">kintone「MEO営業管理」のCSVから、当月分の更新用CSVを自動生成します。月初に実行してください。</p>
+
+  <!-- ステップ1：対象月設定 -->
+  <div class="card">
+    <h2 class="step-title"><span class="step-num">1</span>対象月の設定</h2>
+    <div class="month-row">
+      <label>年:
+        <select id="yearSelect"></select>
+      </label>
+      <label>月:
+        <select id="monthSelect"></select>
+      </label>
+      <span class="month-display" id="monthDisplay">2026年5月</span>
+    </div>
+    <details>
+      <summary>処理ルールの確認</summary>
+      <ul class="help-list" style="margin-top:8px">
+        <li><strong>条件①</strong>：商談日が対象月の案件 → 対象月を「YYYY年M月」に上書き</li>
+        <li><strong>条件②</strong>：ステータスが「仮受注」の案件 → ステータスを「仮受注(流れ)」に変更し、対象月も上書き</li>
+        <li>出力CSVの列：<strong>レコード番号 / ステータス / 対象月</strong> の3列のみ</li>
+        <li>同一レコードが①②両方に該当する場合は②の処理を優先（重複なし）</li>
+      </ul>
+    </details>
+  </div>
+
+  <!-- ステップ2：CSVアップロード -->
+  <div class="card">
+    <h2 class="step-title"><span class="step-num">2</span>kintone出力CSVを読み込み</h2>
+    <details>
+      <summary>kintoneからCSVを書き出す手順</summary>
+      <ol class="help-list" style="margin-top:8px">
+        <li>kintoneのMEO営業管理アプリを開く</li>
+        <li>右上の <strong>⋯</strong> → 「ファイルに書き出す」を選択</li>
+        <li>文字コード：<strong>BOM付UTF-8（Unicode）</strong> を手動で選択</li>
+        <li>左上の「書き出す」をクリック → CSVがダウンロードされる</li>
+        <li>そのCSVを下の枠にドラッグ＆ドロップ</li>
+      </ol>
+    </details>
+    <div class="drop-zone" id="dropZone" style="margin-top:12px">
+      <p class="drop-zone-text">ここにCSVをドラッグ＆ドロップ<br>または クリックして選択</p>
+      <p class="drop-zone-hint">kintoneアプリ「MEO営業管理」(ID:1470) のCSV出力ファイル</p>
+      <input type="file" id="fileInput" accept=".csv">
+      <p class="file-name hidden" id="fileName"></p>
+    </div>
+    <div id="alertArea"></div>
+  </div>
+
+  <!-- ステップ3：プレビュー -->
+  <div class="card hidden" id="previewCard">
+    <h2 class="step-title"><span class="step-num">3</span>変換プレビュー</h2>
+    <div class="summary">
+      <div class="summary-item">
+        <div class="summary-label">読込総件数</div>
+        <div class="summary-value" id="totalCount">-</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">①商談日が対象月</div>
+        <div class="summary-value" id="group1Count">-</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">②仮受注→仮受注(流れ)</div>
+        <div class="summary-value" id="group2Count">-</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">出力件数</div>
+        <div class="summary-value highlight" id="outputCount">-</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>区分</th>
+            <th>レコード番号</th>
+            <th>商談日</th>
+            <th>変更前ステータス</th>
+            <th>変更後ステータス</th>
+            <th>対象月</th>
+            <th>案件名</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ステップ4：ダウンロード -->
+  <div class="card hidden" id="downloadCard">
+    <h2 class="step-title"><span class="step-num">4</span>CSVダウンロード＆kintoneインポート</h2>
+    <button class="primary" id="downloadBtn">変換後CSVをダウンロード</button>
+    <details open>
+      <summary>kintoneインポート手順</summary>
+      <ol class="help-list" style="margin-top:8px">
+        <li>kintoneのMEO営業管理アプリを開く</li>
+        <li>右上の <strong>⋯</strong> → 「ファイルから読み込む」を選択</li>
+        <li>①「参照」をクリック → ダウンロードしたCSVファイルを選択</li>
+        <li>②「読み込むファイルの先頭行はフィールド名ですか？」→ <strong>はい</strong></li>
+        <li>文字コード：<strong>UTF-8（Unicode）</strong> を手動で選択</li>
+        <li>左上の「読み込む」をクリックして完了</li>
+      </ol>
+    </details>
+  </div>
+
+  <p class="footer-note">© 株式会社Ace 社内ツール</p>
+</div>
+
+<script>
+// ============ 設定 ============
+const NEGOTIATION_DATE_COL = '商談日';
+const STATUS_COL = 'ステータス';
+const TARGET_MONTH_COL = '対象月';
+const RECORD_ID_COL = 'レコード番号';
+const PROJECT_NAME_COL = '案件名';
+const STATUS_FROM = '仮受注';
+const STATUS_TO = '仮受注(流れ)';
+const OUTPUT_COLUMNS = [RECORD_ID_COL, STATUS_COL, TARGET_MONTH_COL];
+
+// ============ 状態 ============
+let parsedRows = [];
+let originalHeaders = [];
+let outputRows = [];
+
+// ============ 月選択初期化 ============
+function initMonthSelectors() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  const yearSel = document.getElementById('yearSelect');
+  const monthSel = document.getElementById('monthSelect');
+
+  // 年：前年〜翌年（3年分）
+  for (let y = currentYear - 1; y <= currentYear + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y + '年';
+    if (y === currentYear) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+  // 月：1〜12
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m + '月';
+    if (m === currentMonth) opt.selected = true;
+    monthSel.appendChild(opt);
+  }
+  updateMonthDisplay();
+
+  yearSel.addEventListener('change', () => { updateMonthDisplay(); reprocess(); });
+  monthSel.addEventListener('change', () => { updateMonthDisplay(); reprocess(); });
+}
+
+function getTargetYearMonth() {
+  return {
+    year: parseInt(document.getElementById('yearSelect').value, 10),
+    month: parseInt(document.getElementById('monthSelect').value, 10),
+  };
+}
+
+function updateMonthDisplay() {
+  const { year, month } = getTargetYearMonth();
+  document.getElementById('monthDisplay').textContent = `${year}年${month}月`;
+}
+
+// ============ CSVパース ============
+function parseCSV(text) {
+  // BOM除去
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuote = false;
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (inQuote) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuote = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"') { inQuote = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') {
+      row.push(field); rows.push(row); row = []; field = ''; i++; continue;
+    }
+    field += c; i++;
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  // 末尾の空行除去
+  while (rows.length > 0 && rows[rows.length - 1].every(c => c === '')) rows.pop();
+  return rows;
+}
+
+function csvEscape(value) {
+  const s = String(value ?? '');
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
+function buildCSV(rows, columns) {
+  const lines = [columns.map(csvEscape).join(',')];
+  for (const r of rows) {
+    lines.push(columns.map(c => csvEscape(r[c])).join(','));
+  }
+  return '\uFEFF' + lines.join('\r\n') + '\r\n';
+}
+
+// ============ 変換ロジック ============
+function processRows() {
+  const { year, month } = getTargetYearMonth();
+  const targetMonthLabel = `${year}年${month}月`;
+  const datePrefix = `${year}/${String(month).padStart(2, '0')}/`;
+  const datePrefixNoZero = `${year}/${month}/`;
+
+  const result = [];
+  const seen = new Set();
+
+  // ② 仮受注 を先に処理（優先）
+  for (const r of parsedRows) {
+    if (r[STATUS_COL] === STATUS_FROM) {
+      const key = r[RECORD_ID_COL];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({
+        __group: '②',
+        __originalStatus: r[STATUS_COL],
+        [RECORD_ID_COL]: key,
+        [STATUS_COL]: STATUS_TO,
+        [TARGET_MONTH_COL]: targetMonthLabel,
+        __negotiationDate: r[NEGOTIATION_DATE_COL] || '',
+        __projectName: r[PROJECT_NAME_COL] || '',
+      });
+    }
+  }
+  // ① 商談日が対象月
+  for (const r of parsedRows) {
+    const d = r[NEGOTIATION_DATE_COL] || '';
+    if (d.startsWith(datePrefix) || d.startsWith(datePrefixNoZero)) {
+      const key = r[RECORD_ID_COL];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({
+        __group: '①',
+        __originalStatus: r[STATUS_COL],
+        [RECORD_ID_COL]: key,
+        [STATUS_COL]: r[STATUS_COL], // ①ではステータス変更なし
+        [TARGET_MONTH_COL]: targetMonthLabel,
+        __negotiationDate: d,
+        __projectName: r[PROJECT_NAME_COL] || '',
+      });
+    }
+  }
+  // レコード番号でソート
+  result.sort((a, b) => parseInt(a[RECORD_ID_COL], 10) - parseInt(b[RECORD_ID_COL], 10));
+  return result;
+}
+
+function reprocess() {
+  if (parsedRows.length === 0) return;
+  outputRows = processRows();
+  renderPreview();
+}
+
+function renderPreview() {
+  const total = parsedRows.length;
+  const g1 = outputRows.filter(r => r.__group === '①').length;
+  const g2 = outputRows.filter(r => r.__group === '②').length;
+
+  document.getElementById('totalCount').textContent = total.toLocaleString();
+  document.getElementById('group1Count').textContent = g1.toLocaleString();
+  document.getElementById('group2Count').textContent = g2.toLocaleString();
+  document.getElementById('outputCount').textContent = outputRows.length.toLocaleString();
+
+  const tbody = document.getElementById('previewBody');
+  tbody.innerHTML = '';
+  for (const r of outputRows) {
+    const tr = document.createElement('tr');
+    const badge = r.__group === '①'
+      ? '<span class="badge badge-1">①</span>'
+      : '<span class="badge badge-2">②</span>';
+    const statusChange = r.__group === '②'
+      ? `<span style="color:#dc2626;text-decoration:line-through">${r.__originalStatus}</span>`
+      : `<span style="color:#9ca3af">―</span>`;
+    tr.innerHTML = `
+      <td>${badge}</td>
+      <td class="num">${r[RECORD_ID_COL]}</td>
+      <td>${r.__negotiationDate}</td>
+      <td>${statusChange}</td>
+      <td><strong>${r[STATUS_COL]}</strong></td>
+      <td>${r[TARGET_MONTH_COL]}</td>
+      <td>${r.__projectName}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById('previewCard').classList.remove('hidden');
+  document.getElementById('downloadCard').classList.remove('hidden');
+}
+
+// ============ ファイル読込 ============
+function showAlert(type, msg) {
+  const area = document.getElementById('alertArea');
+  area.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+}
+
+function clearAlert() {
+  document.getElementById('alertArea').innerHTML = '';
+}
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    showAlert('error', 'CSVファイルを選択してください。');
+    return;
+  }
+  document.getElementById('fileName').textContent = '読込ファイル：' + file.name;
+  document.getElementById('fileName').classList.remove('hidden');
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const text = e.target.result;
+      const cells = parseCSV(text);
+      if (cells.length < 2) {
+        showAlert('error', 'CSVにデータ行がありません。');
+        return;
+      }
+      originalHeaders = cells[0];
+      // 必須列チェック
+      const required = [RECORD_ID_COL, STATUS_COL, TARGET_MONTH_COL, NEGOTIATION_DATE_COL];
+      const missing = required.filter(c => !originalHeaders.includes(c));
+      if (missing.length > 0) {
+        showAlert('error', `必須列が見つかりません：${missing.join(', ')}<br>kintone「MEO営業管理」の出力CSVを選択してください。`);
+        return;
+      }
+      parsedRows = cells.slice(1).map(row => {
+        const obj = {};
+        originalHeaders.forEach((h, idx) => { obj[h] = row[idx] ?? ''; });
+        return obj;
+      });
+      clearAlert();
+      showAlert('success', `${parsedRows.length}件読み込みました。下のプレビューで内容を確認してください。`);
+      reprocess();
+    } catch (err) {
+      console.error(err);
+      showAlert('error', '読込中にエラーが発生しました：' + err.message);
+    }
+  };
+  reader.onerror = () => showAlert('error', 'ファイル読込エラー');
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ============ ダウンロード ============
+function downloadCSV() {
+  if (outputRows.length === 0) return;
+  const { year, month } = getTargetYearMonth();
+  const monthStr = String(month).padStart(2, '0');
+  const today = new Date();
+  const stamp = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+  const filename = `MEO営業管理_kintone上書き用_${year}${monthStr}_${stamp}.csv`;
+
+  const csv = buildCSV(outputRows, OUTPUT_COLUMNS);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ============ イベント登録 ============
+function init() {
+  initMonthSelectors();
+
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault(); dropZone.classList.add('dragover');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault(); dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+
+  document.getElementById('downloadBtn').addEventListener('click', downloadCSV);
+}
+
+init();
+</script>
+</body>
+</html>
