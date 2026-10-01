@@ -257,7 +257,7 @@
       <summary>処理ルールの確認</summary>
       <ul class="help-list" style="margin-top:8px">
         <li><strong>条件①</strong>：商談日が対象月の案件 → 対象月を「YYYY年M月」に上書き</li>
-        <li><strong>条件②</strong>：ステータスが「仮受注」の案件 → ステータスを「仮受注(流れ)」に変更し、対象月も上書き</li>
+        <li><strong>条件②</strong>：ステータスが「仮受注」または「仮受注(流れ)」の案件 → ステータスを「仮受注(流れ)」に統一し、対象月も上書き（商談日は問わない）</li>
         <li>出力CSVの列：<strong>レコード番号 / ステータス / 対象月</strong> の3列のみ</li>
         <li>同一レコードが①②両方に該当する場合は②の処理を優先（重複なし）</li>
       </ul>
@@ -299,7 +299,7 @@
         <div class="summary-value" id="group1Count">-</div>
       </div>
       <div class="summary-item">
-        <div class="summary-label">②仮受注→仮受注(流れ)</div>
+        <div class="summary-label">②仮受注・仮受注(流れ)</div>
         <div class="summary-value" id="group2Count">-</div>
       </div>
       <div class="summary-item">
@@ -355,6 +355,11 @@ const PROJECT_NAME_COL = '案件名';
 const STATUS_FROM = '仮受注';
 const STATUS_TO = '仮受注(流れ)';
 const OUTPUT_COLUMNS = [RECORD_ID_COL, STATUS_COL, TARGET_MONTH_COL];
+
+// ステータス表記ゆれ対策（前後の空白・全角カッコ）
+function normStatus(v) {
+  return String(v ?? '').trim().replace(/（/g, '(').replace(/）/g, ')');
+}
 
 // ============ 状態 ============
 let parsedRows = [];
@@ -460,9 +465,11 @@ function processRows() {
   const result = [];
   const seen = new Set();
 
-  // ② 仮受注 を先に処理（優先）
+  // ② 仮受注 と 既存の仮受注(流れ) を先に処理（優先）
+  //    既存の仮受注(流れ)も毎月「対象月」を当月へ繰り越す
   for (const r of parsedRows) {
-    if (r[STATUS_COL] === STATUS_FROM) {
+    const st = normStatus(r[STATUS_COL]);
+    if (st === STATUS_FROM || st === STATUS_TO) {
       const key = r[RECORD_ID_COL];
       if (seen.has(key)) continue;
       seen.add(key);
@@ -523,7 +530,7 @@ function renderPreview() {
     const badge = r.__group === '①'
       ? '<span class="badge badge-1">①</span>'
       : '<span class="badge badge-2">②</span>';
-    const statusChange = r.__group === '②'
+    const statusChange = (r.__group === '②' && r.__originalStatus !== r[STATUS_COL])
       ? `<span style="color:#dc2626;text-decoration:line-through">${r.__originalStatus}</span>`
       : `<span style="color:#9ca3af">―</span>`;
     tr.innerHTML = `
