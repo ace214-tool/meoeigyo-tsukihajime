@@ -233,13 +233,21 @@
     font-size: 12px;
     margin-top: 24px;
   }
+  .summary { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .fetch-note { margin-left: 12px; font-size: 13px; color: #6b7280; }
+  .key-box { margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+  .key-box input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+  .badge-need { background: #fee2e2; color: #991b1b; }
+  .badge-done { background: #dcfce7; color: #166534; }
+  tr.row-done td { color: #9ca3af; }
+  tr.row-done td strong { font-weight: 400; }
 </style>
 </head>
 <body>
 <div class="container">
 
   <h1>【MEO営業管理】月初CSV変換ツール</h1>
-  <p class="subtitle">kintone「MEO営業管理」のCSVから、当月分の更新用CSVを自動生成します。月初に実行してください。</p>
+  <p class="subtitle">kintone「MEO営業管理」から最新データを自動取得し、当月分の上書き用CSVを作ります。月初に実行してください。</p>
 
   <!-- ステップ1：対象月設定 -->
   <div class="card">
@@ -251,7 +259,7 @@
       <label>月:
         <select id="monthSelect"></select>
       </label>
-      <span class="month-display" id="monthDisplay">2026年5月</span>
+      <span class="month-display" id="monthDisplay"></span>
     </div>
     <details>
       <summary>処理ルールの確認</summary>
@@ -260,30 +268,37 @@
         <li><strong>条件②</strong>：ステータスが「仮受注」または「仮受注(流れ)」の案件 → ステータスを「仮受注(流れ)」に統一し、対象月も上書き（商談日は問わない）</li>
         <li>出力CSVの列：<strong>レコード番号 / ステータス / 対象月</strong> の3列のみ</li>
         <li>同一レコードが①②両方に該当する場合は②の処理を優先（重複なし）</li>
+        <li>すでにkintone側が正しい値になっている行は「反映済み」と表示し、CSVには出力しない</li>
       </ul>
     </details>
   </div>
 
-  <!-- ステップ2：CSVアップロード -->
+  <!-- ステップ2：kintoneから取得 -->
   <div class="card">
-    <h2 class="step-title"><span class="step-num">2</span>kintone出力CSVを読み込み</h2>
-    <details>
-      <summary>kintoneからCSVを書き出す手順</summary>
-      <ol class="help-list" style="margin-top:8px">
-        <li>kintoneのMEO営業管理アプリを開く</li>
-        <li>右上の <strong>⋯</strong> → 「ファイルに書き出す」を選択</li>
-        <li>文字コード：<strong>BOM付UTF-8（Unicode）</strong> を手動で選択</li>
-        <li>左上の「書き出す」をクリック → CSVがダウンロードされる</li>
-        <li>そのCSVを下の枠にドラッグ＆ドロップ</li>
-      </ol>
-    </details>
-    <div class="drop-zone" id="dropZone" style="margin-top:12px">
-      <p class="drop-zone-text">ここにCSVをドラッグ＆ドロップ<br>または クリックして選択</p>
-      <p class="drop-zone-hint">kintoneアプリ「MEO営業管理」(ID:1470) のCSV出力ファイル</p>
-      <input type="file" id="fileInput" accept=".csv">
-      <p class="file-name hidden" id="fileName"></p>
+    <h2 class="step-title"><span class="step-num">2</span>kintoneから取得</h2>
+    <button class="primary" id="fetchBtn">🔄 kintoneから最新取得</button>
+    <span class="fetch-note" id="fetchNote"></span>
+
+    <div class="key-box hidden" id="keyBox">
+      <label>合言葉：<input type="password" id="keyInput" autocomplete="off"></label>
+      <button class="secondary" id="keySaveBtn">保存して取得</button>
     </div>
-    <div id="alertArea"></div>
+
+    <div id="alertArea" style="margin-top:12px"></div>
+
+    <details id="csvFallback">
+      <summary>予備：CSVファイルで読み込む（自動取得できないとき）</summary>
+      <ol class="help-list" style="margin-top:8px">
+        <li>kintoneのMEO営業管理アプリ → 右上の <strong>⋯</strong> → 「ファイルに書き出す」</li>
+        <li>文字コード：<strong>BOM付UTF-8（Unicode）</strong> を選び「書き出す」</li>
+        <li>レコード番号・ステータス・対象月・商談日の列が入ったCSVを下の枠に入れる</li>
+      </ol>
+      <div class="drop-zone" id="dropZone" style="margin-top:12px">
+        <p class="drop-zone-text">ここにCSVをドラッグ＆ドロップ<br>または クリックして選択</p>
+        <input type="file" id="fileInput" accept=".csv">
+        <p class="file-name hidden" id="fileName"></p>
+      </div>
+    </details>
   </div>
 
   <!-- ステップ3：プレビュー -->
@@ -291,7 +306,7 @@
     <h2 class="step-title"><span class="step-num">3</span>変換プレビュー</h2>
     <div class="summary">
       <div class="summary-item">
-        <div class="summary-label">読込総件数</div>
+        <div class="summary-label" id="totalLabel">取得件数</div>
         <div class="summary-value" id="totalCount">-</div>
       </div>
       <div class="summary-item">
@@ -303,8 +318,12 @@
         <div class="summary-value" id="group2Count">-</div>
       </div>
       <div class="summary-item">
-        <div class="summary-label">出力件数</div>
+        <div class="summary-label">要更新（CSV出力）</div>
         <div class="summary-value highlight" id="outputCount">-</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">反映済み</div>
+        <div class="summary-value" id="doneCount">-</div>
       </div>
     </div>
     <div class="table-wrap">
@@ -312,10 +331,10 @@
         <thead>
           <tr>
             <th>区分</th>
+            <th>状態</th>
             <th>レコード番号</th>
             <th>商談日</th>
-            <th>変更前ステータス</th>
-            <th>変更後ステータス</th>
+            <th>ステータス</th>
             <th>対象月</th>
             <th>案件名</th>
           </tr>
@@ -328,7 +347,7 @@
   <!-- ステップ4：ダウンロード -->
   <div class="card hidden" id="downloadCard">
     <h2 class="step-title"><span class="step-num">4</span>CSVダウンロード＆kintoneインポート</h2>
-    <button class="primary" id="downloadBtn">変換後CSVをダウンロード</button>
+    <button class="primary" id="downloadBtn">上書き用CSVをダウンロード</button>
     <details open>
       <summary>kintoneインポート手順</summary>
       <ol class="help-list" style="margin-top:8px">
@@ -337,7 +356,8 @@
         <li>①「参照」をクリック → ダウンロードしたCSVファイルを選択</li>
         <li>②「読み込むファイルの先頭行はフィールド名ですか？」→ <strong>はい</strong></li>
         <li>文字コード：<strong>UTF-8（Unicode）</strong> を手動で選択</li>
-        <li>左上の「読み込む」をクリックして完了</li>
+        <li>左上の「読み込む」をクリック</li>
+        <li>読み込み完了後、上の「🔄 kintoneから最新取得」をもう一度押す → <strong>要更新が0件</strong>になっていれば完了</li>
       </ol>
     </details>
   </div>
@@ -347,6 +367,9 @@
 
 <script>
 // ============ 設定 ============
+// ★GAS（meoeigyo-tsukihajime-kintone-proxy）のウェブアプリURL（…/exec）
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz2Rrw7TrLVT9kJ1mVGHpaRKuReonOHroeYlPR_1WMjfcMaTZWpn8bta4X778NwCf2t/exec';
+
 const NEGOTIATION_DATE_COL = '商談日';
 const STATUS_COL = 'ステータス';
 const TARGET_MONTH_COL = '対象月';
@@ -355,16 +378,23 @@ const PROJECT_NAME_COL = '案件名';
 const STATUS_FROM = '仮受注';
 const STATUS_TO = '仮受注(流れ)';
 const OUTPUT_COLUMNS = [RECORD_ID_COL, STATUS_COL, TARGET_MONTH_COL];
+const KEY_STORAGE = 'meoeigyo-tsukihajime-key';
 
 // ステータス表記ゆれ対策（前後の空白・全角カッコ）
 function normStatus(v) {
   return String(v ?? '').trim().replace(/（/g, '(').replace(/）/g, ')');
 }
 
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // ============ 状態 ============
 let parsedRows = [];
-let originalHeaders = [];
 let outputRows = [];
+let loaded = false;      // データ読込済みか
+let source = null;       // 'kintone' | 'csv'
+let meta = {};           // kintone取得時の付帯情報（対象月の表記・変更後ステータスの表記など）
 
 // ============ 月選択初期化 ============
 function initMonthSelectors() {
@@ -393,8 +423,19 @@ function initMonthSelectors() {
   }
   updateMonthDisplay();
 
-  yearSel.addEventListener('change', () => { updateMonthDisplay(); reprocess(); });
-  monthSel.addEventListener('change', () => { updateMonthDisplay(); reprocess(); });
+  yearSel.addEventListener('change', onMonthChange);
+  monthSel.addEventListener('change', onMonthChange);
+}
+
+function onMonthChange() {
+  updateMonthDisplay();
+  if (source === 'kintone') {
+    // kintoneからは対象月の分だけ取得しているので、取り直しが必要
+    resetData();
+    showAlert('info', '対象月を変更しました。もう一度「kintoneから最新取得」を押してください。');
+  } else {
+    reprocess();
+  }
 }
 
 function getTargetYearMonth() {
@@ -409,7 +450,93 @@ function updateMonthDisplay() {
   document.getElementById('monthDisplay').textContent = `${year}年${month}月`;
 }
 
-// ============ CSVパース ============
+function resetData() {
+  parsedRows = [];
+  outputRows = [];
+  loaded = false;
+  source = null;
+  meta = {};
+  document.getElementById('previewCard').classList.add('hidden');
+  document.getElementById('downloadCard').classList.add('hidden');
+  document.getElementById('fetchNote').textContent = '';
+}
+
+// ============ kintoneから取得 ============
+function getKey() {
+  try { return localStorage.getItem(KEY_STORAGE) || ''; } catch (e) { return ''; }
+}
+function setKey(v) {
+  try { localStorage.setItem(KEY_STORAGE, v); } catch (e) { /* 保存できなくても動作は続ける */ }
+}
+
+async function fetchFromKintone(keyOverride) {
+  if (!GAS_URL) {
+    showAlert('error', 'GASのURLが未設定です（index.html の GAS_URL）。下の「予備：CSVファイルで読み込む」を使ってください。');
+    return;
+  }
+  const btn = document.getElementById('fetchBtn');
+  const { year, month } = getTargetYearMonth();
+  const ym = `${year}-${String(month).padStart(2, '0')}`;
+  const key = keyOverride ?? getKey();
+
+  btn.disabled = true;
+  btn.textContent = '取得中…';
+  clearAlert();
+  try {
+    const url = GAS_URL + '?ym=' + encodeURIComponent(ym) + (key ? '&key=' + encodeURIComponent(key) : '');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('通信エラー（' + res.status + '）');
+    const data = await res.json();
+
+    if (!data.ok) {
+      if (data.error === 'KEY_REQUIRED') {
+        document.getElementById('keyBox').classList.remove('hidden');
+        showAlert('error', key ? '合言葉が違います。入力し直してください。' : '合言葉を入力してください。');
+        return;
+      }
+      throw new Error(data.error || '不明なエラー');
+    }
+    if (keyOverride) setKey(keyOverride);
+    document.getElementById('keyBox').classList.add('hidden');
+
+    parsedRows = data.records.map(r => ({
+      [RECORD_ID_COL]: String(r.id),
+      [STATUS_COL]: r.status || '',
+      [NEGOTIATION_DATE_COL]: r.date || '',
+      [TARGET_MONTH_COL]: r.month || '',
+      [PROJECT_NAME_COL]: r.name || '',
+    }));
+    meta = {
+      monthLabel: data.monthLabel,
+      monthOptionExists: data.monthOptionExists,
+      statusTo: data.statusTo,
+      statusFieldType: data.statusFieldType,
+    };
+    source = 'kintone';
+    loaded = true;
+    document.getElementById('fetchNote').textContent = `取得：${data.fetchedAt}`;
+
+    const warns = [];
+    if (data.monthOptionExists === false) {
+      warns.push(`kintoneの「対象月」の選択肢に「${esc(data.monthLabel)}」がありません。先にアプリ設定で選択肢を追加してから読み込んでください（このままだと読み込みエラーになります）。`);
+    }
+    if (data.statusFieldType === 'STATUS') {
+      warns.push('「ステータス」がプロセス管理のステータスとして認識されました。この種類はCSVで上書きできません。');
+    }
+    if (warns.length) showAlert('error', warns.join('<br>'));
+    else showAlert('success', `kintoneから${parsedRows.length}件取得しました。下のプレビューで内容を確認してください。`);
+
+    reprocess();
+  } catch (err) {
+    console.error(err);
+    showAlert('error', 'kintoneからの取得に失敗しました：' + esc(err.message) + '<br>下の「予備：CSVファイルで読み込む」でも処理できます。');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 kintoneから最新取得';
+  }
+}
+
+// ============ CSVパース（予備） ============
 function parseCSV(text) {
   // BOM除去
   if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
@@ -452,13 +579,15 @@ function buildCSV(rows, columns) {
   for (const r of rows) {
     lines.push(columns.map(c => csvEscape(r[c])).join(','));
   }
-  return '\uFEFF' + lines.join('\r\n') + '\r\n';
+  return '﻿' + lines.join('\r\n') + '\r\n';
 }
 
 // ============ 変換ロジック ============
 function processRows() {
   const { year, month } = getTargetYearMonth();
-  const targetMonthLabel = `${year}年${month}月`;
+  // 対象月・変更後ステータスの表記は、kintone取得時はkintone側の選択肢の表記に合わせる
+  const targetMonthLabel = (source === 'kintone' && meta.monthLabel) || `${year}年${month}月`;
+  const statusTo = (source === 'kintone' && meta.statusTo) || STATUS_TO;
   const datePrefix = `${year}/${String(month).padStart(2, '0')}/`;
   const datePrefixNoZero = `${year}/${month}/`;
 
@@ -476,8 +605,9 @@ function processRows() {
       result.push({
         __group: '②',
         __originalStatus: r[STATUS_COL],
+        __originalMonth: r[TARGET_MONTH_COL] || '',
         [RECORD_ID_COL]: key,
-        [STATUS_COL]: STATUS_TO,
+        [STATUS_COL]: statusTo,
         [TARGET_MONTH_COL]: targetMonthLabel,
         __negotiationDate: r[NEGOTIATION_DATE_COL] || '',
         __projectName: r[PROJECT_NAME_COL] || '',
@@ -486,7 +616,7 @@ function processRows() {
   }
   // ① 商談日が対象月
   for (const r of parsedRows) {
-    const d = r[NEGOTIATION_DATE_COL] || '';
+    const d = (r[NEGOTIATION_DATE_COL] || '').replace(/-/g, '/');
     if (d.startsWith(datePrefix) || d.startsWith(datePrefixNoZero)) {
       const key = r[RECORD_ID_COL];
       if (seen.has(key)) continue;
@@ -494,6 +624,7 @@ function processRows() {
       result.push({
         __group: '①',
         __originalStatus: r[STATUS_COL],
+        __originalMonth: r[TARGET_MONTH_COL] || '',
         [RECORD_ID_COL]: key,
         [STATUS_COL]: r[STATUS_COL], // ①ではステータス変更なし
         [TARGET_MONTH_COL]: targetMonthLabel,
@@ -502,27 +633,34 @@ function processRows() {
       });
     }
   }
+  // すでにkintone側が正しい値なら「反映済み」（CSVに出力しない）
+  for (const r of result) {
+    r.__needs = r.__originalStatus !== r[STATUS_COL] || r.__originalMonth !== r[TARGET_MONTH_COL];
+  }
   // レコード番号でソート
   result.sort((a, b) => parseInt(a[RECORD_ID_COL], 10) - parseInt(b[RECORD_ID_COL], 10));
   return result;
 }
 
 function reprocess() {
-  if (parsedRows.length === 0) return;
+  if (!loaded) return;
   outputRows = processRows();
   renderPreview();
 }
 
 function renderPreview() {
-  const total = parsedRows.length;
   const g1 = outputRows.filter(r => r.__group === '①').length;
   const g2 = outputRows.filter(r => r.__group === '②').length;
+  const needs = outputRows.filter(r => r.__needs).length;
 
-  document.getElementById('totalCount').textContent = total.toLocaleString();
+  document.getElementById('totalLabel').textContent = source === 'kintone' ? '取得件数' : '読込総件数';
+  document.getElementById('totalCount').textContent = parsedRows.length.toLocaleString();
   document.getElementById('group1Count').textContent = g1.toLocaleString();
   document.getElementById('group2Count').textContent = g2.toLocaleString();
-  document.getElementById('outputCount').textContent = outputRows.length.toLocaleString();
+  document.getElementById('outputCount').textContent = needs.toLocaleString();
+  document.getElementById('doneCount').textContent = (outputRows.length - needs).toLocaleString();
 
+  const strike = v => `<span style="color:#dc2626;text-decoration:line-through">${esc(v || '(空)')}</span> → `;
   const tbody = document.getElementById('previewBody');
   tbody.innerHTML = '';
   for (const r of outputRows) {
@@ -530,26 +668,37 @@ function renderPreview() {
     const badge = r.__group === '①'
       ? '<span class="badge badge-1">①</span>'
       : '<span class="badge badge-2">②</span>';
-    const statusChange = (r.__group === '②' && r.__originalStatus !== r[STATUS_COL])
-      ? `<span style="color:#dc2626;text-decoration:line-through">${r.__originalStatus}</span>`
-      : `<span style="color:#9ca3af">―</span>`;
+    const state = r.__needs
+      ? '<span class="badge badge-need">要更新</span>'
+      : '<span class="badge badge-done">反映済み</span>';
+    const statusCell = (r.__originalStatus !== r[STATUS_COL] ? strike(r.__originalStatus) : '')
+      + `<strong>${esc(r[STATUS_COL])}</strong>`;
+    const monthCell = (r.__originalMonth !== r[TARGET_MONTH_COL] ? strike(r.__originalMonth) : '')
+      + `<strong>${esc(r[TARGET_MONTH_COL])}</strong>`;
     tr.innerHTML = `
       <td>${badge}</td>
-      <td class="num">${r[RECORD_ID_COL]}</td>
-      <td>${r.__negotiationDate}</td>
-      <td>${statusChange}</td>
-      <td><strong>${r[STATUS_COL]}</strong></td>
-      <td>${r[TARGET_MONTH_COL]}</td>
-      <td>${r.__projectName}</td>
+      <td>${state}</td>
+      <td class="num">${esc(r[RECORD_ID_COL])}</td>
+      <td>${esc(r.__negotiationDate)}</td>
+      <td>${statusCell}</td>
+      <td>${monthCell}</td>
+      <td>${esc(r.__projectName)}</td>
     `;
+    if (!r.__needs) tr.classList.add('row-done');
     tbody.appendChild(tr);
   }
+
+  const btn = document.getElementById('downloadBtn');
+  btn.disabled = needs === 0;
+  btn.textContent = needs === 0
+    ? (outputRows.length === 0 ? '対象のレコードがありません' : 'すべて反映済み（出力するCSVはありません）')
+    : `上書き用CSVをダウンロード（${needs}件）`;
 
   document.getElementById('previewCard').classList.remove('hidden');
   document.getElementById('downloadCard').classList.remove('hidden');
 }
 
-// ============ ファイル読込 ============
+// ============ ファイル読込（予備） ============
 function showAlert(type, msg) {
   const area = document.getElementById('alertArea');
   area.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
@@ -577,25 +726,28 @@ function handleFile(file) {
         showAlert('error', 'CSVにデータ行がありません。');
         return;
       }
-      originalHeaders = cells[0];
+      const headers = cells[0];
       // 必須列チェック
       const required = [RECORD_ID_COL, STATUS_COL, TARGET_MONTH_COL, NEGOTIATION_DATE_COL];
-      const missing = required.filter(c => !originalHeaders.includes(c));
+      const missing = required.filter(c => !headers.includes(c));
       if (missing.length > 0) {
-        showAlert('error', `必須列が見つかりません：${missing.join(', ')}<br>kintone「MEO営業管理」の出力CSVを選択してください。`);
+        showAlert('error', `必須列が見つかりません：${esc(missing.join(', '))}<br>kintone「MEO営業管理」の出力CSVを選択してください。`);
         return;
       }
       parsedRows = cells.slice(1).map(row => {
         const obj = {};
-        originalHeaders.forEach((h, idx) => { obj[h] = row[idx] ?? ''; });
+        headers.forEach((h, idx) => { obj[h] = row[idx] ?? ''; });
         return obj;
       });
-      clearAlert();
-      showAlert('success', `${parsedRows.length}件読み込みました。下のプレビューで内容を確認してください。`);
+      source = 'csv';
+      meta = {};
+      loaded = true;
+      document.getElementById('fetchNote').textContent = '';
+      showAlert('success', `CSVから${parsedRows.length}件読み込みました。下のプレビューで内容を確認してください。`);
       reprocess();
     } catch (err) {
       console.error(err);
-      showAlert('error', '読込中にエラーが発生しました：' + err.message);
+      showAlert('error', '読込中にエラーが発生しました：' + esc(err.message));
     }
   };
   reader.onerror = () => showAlert('error', 'ファイル読込エラー');
@@ -604,14 +756,15 @@ function handleFile(file) {
 
 // ============ ダウンロード ============
 function downloadCSV() {
-  if (outputRows.length === 0) return;
+  const rows = outputRows.filter(r => r.__needs);
+  if (rows.length === 0) return;
   const { year, month } = getTargetYearMonth();
   const monthStr = String(month).padStart(2, '0');
   const today = new Date();
   const stamp = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
   const filename = `MEO営業管理_kintone上書き用_${year}${monthStr}_${stamp}.csv`;
 
-  const csv = buildCSV(outputRows, OUTPUT_COLUMNS);
+  const csv = buildCSV(rows, OUTPUT_COLUMNS);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -626,6 +779,12 @@ function downloadCSV() {
 // ============ イベント登録 ============
 function init() {
   initMonthSelectors();
+
+  document.getElementById('fetchBtn').addEventListener('click', () => fetchFromKintone());
+  document.getElementById('keySaveBtn').addEventListener('click', () => {
+    const v = document.getElementById('keyInput').value.trim();
+    if (v) fetchFromKintone(v);
+  });
 
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
@@ -644,6 +803,9 @@ function init() {
   });
 
   document.getElementById('downloadBtn').addEventListener('click', downloadCSV);
+
+  // GAS未設定のときは予備のCSV読込を開いておく
+  if (!GAS_URL) document.getElementById('csvFallback').open = true;
 }
 
 init();
